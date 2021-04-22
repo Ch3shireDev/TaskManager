@@ -1,0 +1,6 @@
+*.yml
+.vs
+packages
+**/bin
+**/obj
+TestResults
