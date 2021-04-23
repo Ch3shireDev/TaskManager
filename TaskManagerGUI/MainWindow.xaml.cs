@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using TaskManagerLibrary;
 
 namespace TaskManagerGUI
@@ -15,8 +16,6 @@ namespace TaskManagerGUI
     {
         public const string databasePath = "../../../database.yml";
 
-        private int x = 0;
-
         public MainWindow()
         {
             InitializeComponent();
@@ -24,40 +23,33 @@ namespace TaskManagerGUI
             {
                 database = Tools.LoadDatabase(databasePath);
             }
-            catch(Exception e)
+            catch
             {
-                var message = MessageBox.Show($"Błąd - brak bazy danych! {e.Message}", "Błąd", MessageBoxButton.OKCancel);
+                var message = MessageBox.Show("Błąd - brak bazy danych! Czy utworzyć nową bazę danych?", "Błąd",
+                    MessageBoxButton.OKCancel);
                 if (message == MessageBoxResult.Cancel) Close();
-                var newDb = new TaskScheduleDatabase();
+                if (File.Exists(databasePath)) File.Copy(databasePath, databasePath + "-copy");
+                var newDb = new Database();
                 Tools.SaveDatabase(newDb, databasePath);
                 database = newDb;
+                Environment.Exit(0);
             }
 
             foreach (var element in database.Names) ProjectComboBox.Items.Add(element);
-            ProjectComboBox.SelectedItem = database.LastProjectName;
+            ProjectComboBox.SelectedItem = database.CurrentProject;
 
             CurrentProject = database.Projects.LastOrDefault();
 
-            Tick();
+            //Tick();
         }
 
         public bool IsProjectRunning { get; set; }
 
-        public TaskScheduleDatabase database { get; set; }
+        public Database database { get; set; }
 
         public WorkProject CurrentProject { get; set; }
 
-        public async Task Tick()
-        {
-            if (CurrentProject != null)
-            {
-                UpdateTime();
-                Tools.SaveDatabase(database, databasePath);
-            }
-
-            await Task.Delay(1000);
-            await Tick();
-        }
+        private string CurrentProjectName => ProjectComboBox.SelectedItem as string;
 
         public void UpdateTime()
         {
@@ -65,12 +57,11 @@ namespace TaskManagerGUI
 
             var currentDate = DateTime.Now.ToString("yyyy-MM-dd");
             if (currentDate != CurrentProject?.Date && !string.IsNullOrWhiteSpace(CurrentProjectName))
-            {
-                CurrentProject= new WorkProject(CurrentProjectName);
-            }
+                CurrentProject = new WorkProject(CurrentProjectName);
 
             CurrentProject.EndTime = TimeOfDay.Now.ToString();
-            TimeSpentLabel.Content = (CurrentProject.EndTime.AsTimeOfDay() - CurrentProject.StartTime.AsTimeOfDay()).ToString();
+            TimeSpentLabel.Content =
+                (CurrentProject.EndTime.AsTimeOfDay() - CurrentProject.StartTime.AsTimeOfDay()).ToString();
         }
 
         private void OpenYamlButton_Click(object sender, RoutedEventArgs e)
@@ -85,24 +76,24 @@ namespace TaskManagerGUI
             UpdateProject();
         }
 
-        private string CurrentProjectName => ProjectComboBox.SelectedItem as string;
-
         public void UpdateProject()
         {
             IsProjectRunning = !string.IsNullOrWhiteSpace(CurrentProjectName);
             if (string.IsNullOrWhiteSpace(CurrentProjectName)) return;
-            var lastProject = database.Projects.LastOrDefault();
-            if (lastProject == null || lastProject.Name != CurrentProjectName)
-            {
-                lastProject = new WorkProject(CurrentProjectName);
-                database.Projects.Add(lastProject);
-                database.LastProjectName = CurrentProjectName;
-            }
+            //var lastProject = database.Projects.LastOrDefault();
+            //if (lastProject == null || lastProject.Name != CurrentProjectName)
+            //{
+            //    lastProject = new WorkProject(CurrentProjectName);
+            //    database.Projects.Add(lastProject);
+            //    database.CurrentProject = CurrentProjectName;
+            //}
 
-            CurrentProject = lastProject;
+            database.CurrentProject = CurrentProjectName;
+            database.Update();
             UpdateTime();
         }
-        private void ProjectComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+
+        private void ProjectComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateProject();
         }

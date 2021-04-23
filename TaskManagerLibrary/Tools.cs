@@ -3,15 +3,18 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using CsvHelper;
+using MailKit.Net.Smtp;
+using MimeKit;
 using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
+using YamlDotNet.Serialization.NamingConventions; //using System.Net.Mail;
 
 namespace TaskManagerLibrary
 {
     public static class Tools
     {
-        public static void SaveDatabase(TaskScheduleDatabase database, string filepath)
+        public static void SaveDatabase(Database database, string filepath)
         {
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(HyphenatedNamingConvention.Instance).Build();
@@ -19,12 +22,12 @@ namespace TaskManagerLibrary
             File.WriteAllText(filepath, data);
         }
 
-        public static TaskScheduleDatabase LoadDatabase(string filepath)
+        public static Database LoadDatabase(string filepath)
         {
             var data = File.ReadAllText(filepath);
             var deserializer = new DeserializerBuilder()
                 .WithNamingConvention(HyphenatedNamingConvention.Instance).Build();
-            return deserializer.Deserialize<TaskScheduleDatabase>(data);
+            return deserializer.Deserialize<Database>(data);
         }
 
         public static TimeOfDay AsTimeOfDay(this string time)
@@ -32,65 +35,78 @@ namespace TaskManagerLibrary
             return TimeOfDay.Parse(time);
         }
 
-        public static IEnumerable<string> GetProjectData(string filepath, DateTime now)
+        public static IEnumerable<string> GetProjectData(Database database)
+        {
+            return database.GetProjectData();
+        }
+
+        public static IEnumerable<string> GetProjectData(string filepath)
         {
             var database = LoadDatabase(filepath);
-            var date = now.ToString("yyyy-MM-dd");
-            var projects = database.Projects.Where(p => p.Date == date);
-
-            var dict = new Dictionary<string, TimeSpan>();
-            foreach (var p in projects)
-            {
-                var projectName = p.Name;
-                if (!dict.ContainsKey(projectName)) dict.Add(projectName, new TimeSpan(0));
-                dict[projectName] += p.GetTimeSpan();
-            }
-
-            foreach (var pair in dict) yield return $"{pair.Key}: {pair.Value.ToString(@"hh\:mm")}";
+            return GetProjectData(database);
         }
 
         public static string GetCsv(string filepath)
         {
             var database = LoadDatabase(filepath);
-            var textWriter = new StringWriter();
-            var csv = new CsvWriter(textWriter, CultureInfo.CurrentCulture);
-
-            var dates = new HashSet<string>();
-            foreach (var project in database.Projects) dates.Add(project.Date);
-
-            var datesList = dates.ToList();
-            datesList.Sort();
-
-            csv.WriteField("Data");
-            foreach (var name in database.Names) csv.WriteField(name);
-            csv.NextRecord();
-            foreach (var date in datesList)
-            {
-                csv.WriteField(date);
-
-                var projects = database.Projects.Where(p => p.Date == date);
-
-                var dict = new Dictionary<string, TimeSpan>();
-                foreach (var p in projects)
-                {
-                    var projectName = p.Name;
-                    if (!dict.ContainsKey(projectName)) dict.Add(projectName, new TimeSpan(0));
-                    dict[projectName] += p.GetTimeSpan();
-                }
-
-                foreach (var name in database.Names)
-                    csv.WriteField(!dict.ContainsKey(name) ? null : dict[name].ToString(@"hh\:mm"));
-
-                csv.NextRecord();
-            }
-
-            textWriter.Close();
-            return textWriter.ToString();
+            return GetCsv(database);
         }
+
+        private static string GetCsv(Database database)
+        {
+            return database.GetCsv();
+        }
+
 
         public static string GetCurrentDate()
         {
             return DateTime.Now.ToString("yyyy-MM-dd");
+        }
+
+        public static void SendMail(Database database)
+        {
+            var date = DateTime.Now;
+            var connection = database.Connection;
+
+            var dateday = $"{date:yyyy-MM-dd} ({date.ToString("dddd", new CultureInfo("pl-PL"))})";
+            var message = new MimeMessage
+            {
+                Subject = connection.Subject.Replace("<dateday>", dateday),
+                From = {MailboxAddress.Parse(connection.MailFrom)}
+            };
+
+            foreach (var mail in connection.MailTo) message.To.Add(MailboxAddress.Parse(mail));
+
+            var list = GetProjectData(database).ToArray();
+            var data = string.Join("\n", list);
+
+            var bodyBuilder = new BodyBuilder
+            {
+                TextBody = connection.TextBody.Replace("<dateday>", dateday).Replace("<data>", data)
+            };
+
+            var csv = GetCsv(database);
+
+            var reportCsv = connection.AttachmentName;
+            if (File.Exists(reportCsv)) File.Delete(reportCsv);
+            File.WriteAllText(reportCsv, csv, Encoding.UTF8);
+
+            bodyBuilder.Attachments.Add(reportCsv, File.ReadAllBytes(reportCsv));
+
+            message.Body = bodyBuilder.ToMessageBody();
+
+            using (var client = new SmtpClient())
+            {
+                client.Connect(connection.Server, connection.Port);
+                client.Authenticate(connection.Username, connection.Password);
+                client.Send(message);
+                client.Disconnect(true);
+            }
+        }
+
+        public static string GetCurrentTime()
+        {
+            return DateTime.Now.ToString("HH:mm");
         }
     }
 }
