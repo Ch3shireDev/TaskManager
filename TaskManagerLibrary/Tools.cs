@@ -4,11 +4,10 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using CsvHelper;
 using MailKit.Net.Smtp;
 using MimeKit;
 using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions; //using System.Net.Mail;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace TaskManagerLibrary
 {
@@ -52,7 +51,7 @@ namespace TaskManagerLibrary
             return GetCsv(database);
         }
 
-        private static string GetCsv(Database database)
+        public static string GetCsv(Database database)
         {
             return database.GetCsv();
         }
@@ -63,10 +62,9 @@ namespace TaskManagerLibrary
             return DateTime.Now.ToString("yyyy-MM-dd");
         }
 
-        public static void SendMail(Database database)
+        public static void SendMail(Connection connection, Database database,  string csv)
         {
             var date = DateTime.Now;
-            var connection = database.Connection;
 
             var dateday = $"{date:yyyy-MM-dd} ({date.ToString("dddd", new CultureInfo("pl-PL"))})";
             var message = new MimeMessage
@@ -84,8 +82,6 @@ namespace TaskManagerLibrary
             {
                 TextBody = connection.TextBody.Replace("<dateday>", dateday).Replace("<data>", data)
             };
-
-            var csv = GetCsv(database);
 
             var reportCsv = connection.AttachmentName;
             if (File.Exists(reportCsv)) File.Delete(reportCsv);
@@ -107,6 +103,14 @@ namespace TaskManagerLibrary
         public static string GetCurrentTime()
         {
             return DateTime.Now.ToString("HH:mm");
+        }
+
+        public static Connection LoadConnection(string filepath)
+        {
+            var data = File.ReadAllText(filepath);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(HyphenatedNamingConvention.Instance).Build();
+            return deserializer.Deserialize<Connection>(data);
         }
     }
 }

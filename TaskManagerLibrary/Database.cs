@@ -14,7 +14,7 @@ namespace TaskManagerLibrary
         public string CurrentProject { get; set; }
         public string WorkDayStart { get; set; } = "08:00";
         public string WorkDayEnd { get; set; } = "16:00";
-        public Connection Connection { get; set; }
+        //public Connection Connection { get; set; }
         public List<string> DatesSent { get; set; }
         public void Update()
         {
@@ -27,19 +27,19 @@ namespace TaskManagerLibrary
                 project = new WorkProject
                 {
                     Name = CurrentProject,
-                    StartTime = project.EndTime,
-                    EndTime = timeNow,
+                    TimeBegin = project.TimeEnd,
+                    TimeEnd = timeNow,
                     Date = dateNow
                 };
             if (project.Date != dateNow)
             {
-                project.EndTime = WorkDayEnd;
+                project.TimeEnd = WorkDayEnd;
 
                 project = new WorkProject
                 {
                     Date = dateNow,
-                    StartTime = WorkDayStart,
-                    EndTime = timeNow,
+                    TimeBegin = WorkDayStart,
+                    TimeEnd = timeNow,
                     Name = CurrentProject
                 };
 
@@ -47,7 +47,7 @@ namespace TaskManagerLibrary
             }
             else
             {
-                project.EndTime = timeNow;
+                project.TimeEnd = timeNow;
             }
         }
 
